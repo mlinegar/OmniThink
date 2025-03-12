@@ -85,14 +85,24 @@ Welcome to **OmniThink**, an innovative machine writing framework designed to re
 
 # 🛠 Dependencies
 
+
+## 📦 Conda
+
 ```bash
 conda create -n OmniThink python=3.11
 git clone https://github.com/zjunlp/OmniThink.git
 cd OmniThink
 # Install requirements
 pip install -r requirements.txt
-
 ```
+
+## 🐳 Docker
+```
+git clone https://github.com/zjunlp/OmniThink.git
+docker pull zjunlp/omnithink:latest
+docker run -it zjunlp/omnithink:latest
+```
+
 🔑 Before running, please export the LM API key and SEARCH key as an environment variable:
 
 
