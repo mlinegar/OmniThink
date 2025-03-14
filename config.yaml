@@ -1,0 +1,6 @@
+# agent
+# language_type
+language:
+  language_type: "Chinese"          # language_type:  Chinese, English
+  style: "enthusiastic"                 # style: formal, academic, concise, enthusiastic, indifferent
+

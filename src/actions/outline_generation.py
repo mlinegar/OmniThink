@@ -24,6 +24,7 @@ class OutlineGenerationModule():
 
         return result
 
+
 class WriteOutline(dspy.Module):
     """Generate the outline for the Wikipedia page."""
 
