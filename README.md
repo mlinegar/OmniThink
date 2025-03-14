@@ -60,6 +60,7 @@ through Thinking</h3>
 # 🌻Acknowledgement
 
 - This work is implemented by [DsPY](https://github.com/stanfordnlp/dspy), [STORM](https://github.com/stanford-oval/storm) Sincere thanks for their efforts.
+- We are also very grateful to [Zhangjiabao-nudt](https://github.com/Zhangjiabao-nudt) and [techshoww](https://github.com/techshoww) for their contributions to this repository.
 - if you have any questions, please feel free to contact via xizekun.xzk@alibaba-inc.com, 1786594371@qq.com or xizekun2023@zju.edu.cn or create an issue.
 
 
