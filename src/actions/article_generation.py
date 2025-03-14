@@ -9,6 +9,7 @@ import sys
 
 from src.utils.ArticleTextProcessing import ArticleTextProcessing
 
+
 # This code is originally sourced from Repository STORM
 # URL: [https://github.com/stanford-oval/storm]
 class ArticleGenerationModule():
@@ -22,7 +23,7 @@ class ArticleGenerationModule():
                  article_gen_lm=Union[dspy.dsp.LM, dspy.dsp.HFModel],
                  retrieve_top_k: int = 10,
                  max_thread_num: int = 10,
-                ):
+                 ):
         super().__init__()
         self.retrieve_top_k = retrieve_top_k
         self.article_gen_lm = article_gen_lm
@@ -30,15 +31,15 @@ class ArticleGenerationModule():
         self.retriever = retriever
         self.section_gen = ConvToSection(engine=self.article_gen_lm)
 
-
-    def generate_section(self, topic, section_name, mindmap, section_query, section_outline):
+    def generate_section(self, topic, section_name, mindmap, section_query, section_outline, language_style):
         collected_info = mindmap.retrieve_information(queries=section_query,
-                                                                    search_top_k=self.retrieve_top_k)
+                                                      search_top_k=self.retrieve_top_k)
         output = self.section_gen(
             topic=topic,
             outline=section_outline,
             section=section_name,
             collected_info=collected_info,
+            language_style=language_style,
         )
 
         return {"section_name": section_name, "section_content": output.section, "collected_info": collected_info}
@@ -47,11 +48,14 @@ class ArticleGenerationModule():
                          topic: str,
                          mindmap,
                          article_with_outline,
+                         language_style=None,
                          ):
         """
         Generate article for the topic based on the information table and article outline.
         """
         mindmap.prepare_table_for_retrieval()
+        language_style = "{} {}\n".format(language_style.get('style', ''),
+                                          language_style.get('language_type', '')) if language_style else str()
 
         sections_to_write = article_with_outline.get_first_level_section_names()
         section_output_dict_collection = []
@@ -68,8 +72,8 @@ class ArticleGenerationModule():
                 section_outline = "\n".join(queries_with_hashtags)
 
                 future_to_sec_title[
-                    executor.submit(self.generate_section, 
-                                    topic, section_title, mindmap, section_query,section_outline)
+                    executor.submit(self.generate_section,
+                                    topic, section_title, mindmap, section_query, section_outline, language_style)
                 ] = section_title
 
             for future in concurrent.futures.as_completed(future_to_sec_title):
@@ -80,20 +84,22 @@ class ArticleGenerationModule():
             article.update_section(parent_section_name=topic,
                                    current_section_content=section_output_dict["section_content"],
                                    current_section_info_list=section_output_dict["collected_info"],
-                                )
+                                   )
 
         article.post_processing()
 
         return article
 
+
 class ConvToSection(dspy.Module):
     """Use the information collected from the information-seeking conversation to write a section."""
+
     def __init__(self, engine: Union[dspy.dsp.LM, dspy.dsp.HFModel]):
         super().__init__()
         self.write_section = dspy.Predict(WriteSection)
         self.engine = engine
 
-    def forward(self, topic: str, outline:str, section: str, collected_info: List):
+    def forward(self, topic: str, outline: str, section: str, collected_info: List, language_style: str):
         all_info = ''
         for idx, info in enumerate(collected_info):
             all_info += f'[{idx + 1}]\n' + '\n'.join(info['snippets'])
@@ -103,10 +109,11 @@ class ConvToSection(dspy.Module):
 
         with dspy.settings.context(lm=self.engine):
             section = ArticleTextProcessing.clean_up_section(
-                self.write_section(topic=topic, info=info, section=section).output)
-         
-        section = section.replace('\[','[').replace('\]',']')
+                self.write_section(topic=topic, info=info, section=section, language_style=language_style).output)
+
+        section = section.replace('\[', '[').replace('\]', ']')
         return dspy.Prediction(section=section)
+
 
 class WriteSection(dspy.Signature):
     """Write a Wikipedia section based on the collected information.
@@ -119,6 +126,7 @@ class WriteSection(dspy.Signature):
     info = dspy.InputField(prefix="The Collected information:\n", format=str)
     topic = dspy.InputField(prefix="The topic of the page: ", format=str)
     section = dspy.InputField(prefix="The section you need to write: ", format=str)
+    language_style = dspy.InputField(prefix='the language style you needs to imitate: ', format=str)
     output = dspy.OutputField(
         prefix="Write the section with proper inline citations (Start your writing with # section title. Don't include the page title or try to write other sections):\n",
         format=str)
