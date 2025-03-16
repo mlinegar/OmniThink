@@ -6,6 +6,8 @@ import requests
 import re
 import uuid
 import json
+import random
+import time
 from src.utils.WebPageHelper import WebPageHelper
 
 
@@ -23,7 +25,8 @@ class GoogleSearchAli(dspy.Retrieve):
                  mkt='en-US', language='en-US', **kwargs):
 
         super().__init__(k=k)
-        key = os.environ.get('SEARCHKEY', 'default_value')
+        # key = os.environ.get('SEARCHKEY', 'default_value')
+        key = "19WaNVGhRjcjYcKuOV96w"
         self.header = {
             "Content-Type": "application/json",
             "Accept-Encoding": "utf-8",
@@ -81,25 +84,35 @@ class GoogleSearchAli(dspy.Retrieve):
 
         url_to_results = {}
 
+        MAX_RETRIES = 30
         for query in queries:
-            try:
-                self.template["uq"] = query
+            retries = 0
+            while retries < MAX_RETRIES:
+                try:
+                    self.template["uq"] = query
 
-                response = requests.post(
-                    "https://nlp-cn-beijing.aliyuncs.com/gw/v1/api/msearch-sp/qwen-search",
-                    data=json.dumps(self.template),
-                    headers=self.header,
-                )              
-                response = json.loads(response.text)
-                search_results = response['data']['docs']
-                for result in search_results:
-                    url_to_results[result['url']] = {
-                        'url': result['url'],
-                        'title': result['title'],
-                        'description': result.get('snippet', '')
-                    }
-            except Exception as e:
-                logging.error(f'Error occurs when searching query {query}: {e}')
+                    response = requests.post(
+                        "https://nlp-cn-beijing.aliyuncs.com/gw/v1/api/msearch-sp/qwen-search",
+                        data=json.dumps(self.template),
+                        headers=self.header,
+                    )
+                    response = json.loads(response.text)
+                    search_results = response['data']['docs']
+                    for result in search_results:
+                        url_to_results[result['url']] = {
+                            'url': result['url'],
+                            'title': result['title'],
+                            'description': result.get('snippet', '')
+                        }
+                except Exception as e:
+                    retries += 1
+                    RETRY_DELAY = random.uniform(0, 10)
+                    logging.error(f"Error occurred when searching query {query}: {e}")
+                    if retries < MAX_RETRIES:
+                        logging.info(f"Retrying ({retries}/{MAX_RETRIES}) after {RETRY_DELAY} seconds...")
+                        time.sleep(RETRY_DELAY)
+                    else:
+                        logging.error(f"Max retries reached for query {query}. Skipping.")
 
         valid_url_to_snippets = self.webpage_helper.urls_to_snippets(list(url_to_results.keys()))
         collected_results = []
@@ -310,4 +323,113 @@ class BingSearch(dspy.Retrieve):
             r['snippets'] = valid_url_to_snippets[url]['snippets']
             collected_results.append(r)
         return collected_results
+
+
+class BingSearchAli_new(dspy.Retrieve):
+    def __init__(self, bing_search_api_key=None, k=3, is_valid_source: Callable = None,
+                 min_char_count: int = 150, snippet_chunk_size: int = 1000, webpage_helper_max_threads=10,
+                 mkt='en-US', language='en-US', **kwargs):
+
+        super().__init__(k=k)
+
+        self.header = {
+            "Content-Type": "application/json",
+            "Accept-Encoding": "utf-8",
+            "Authorization": "Bearer lm-/19WaNVGhRjcjYcKuOV96w== ",
+        }
+        self.template = {
+            "rid": str(uuid.uuid4()),
+            "scene": "dolphin_search_bing_nlp",
+            "uq": "",
+            "debug": True,
+            "fields": [],
+            "page": 1,
+            "rows": 10,
+            "customConfigInfo": {
+                "multiSearch": False,
+                "qpMultiQuery": False,
+                "qpMultiQueryHistory": [],
+                "qpSpellcheck": False,
+                "qpEmbedding": False,
+                "knnWithScript": False,
+                "qpTermsWeight": False,
+                "pluginServiceConfig": {"qp": "mvp_search_qp_qwen"},  # v3 rewrite
+            },
+            "headers": {"__d_head_qto": 5000},
+        }
+
+        self.webpage_helper = WebPageHelper(
+            min_char_count=min_char_count,
+            snippet_chunk_size=snippet_chunk_size,
+            max_thread_num=webpage_helper_max_threads
+        )
+        self.usage = 0
+
+        # If not None, is_valid_source shall be a function that takes a URL and returns a boolean.
+        if is_valid_source:
+            self.is_valid_source = is_valid_source
+        else:
+            self.is_valid_source = lambda x: True
+
+    def get_usage_and_reset(self):
+        usage = self.usage
+        self.usage = 0
+
+        return {'BingSearch': usage}
+
+    def forward(self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []):
+
+        queries = (
+            [query_or_queries]
+            if isinstance(query_or_queries, str)
+            else query_or_queries
+        )
+        self.usage += len(queries)
+
+        url_to_results = {}
+
+        MAX_RETRIES = 30
+
+        for query in queries:
+            retries = 0
+            while retries < MAX_RETRIES:
+                try:
+                    self.template["uq"] = query
+
+                    response = requests.post(
+                        "https://nlp-cn-beijing.aliyuncs.com/gw/v1/api/msearch-sp/qwen-search",
+                        data=json.dumps(self.template),
+                        headers=self.header,
+                    )
+                    response = json.loads(response.text)
+                    print(response)
+                    search_results = response['data']['docs']
+                    for result in search_results:
+                        url_to_results[result['url']] = {
+                            'url': result['url'],
+                            'title': result['title'],
+                            'description': result.get('snippet', '')
+                        }
+                    break  # Exit the retry loop if request is successful
+                except Exception as e:
+                    retries += 1
+                    RETRY_DELAY = random.uniform(0, 10)
+                    logging.error(f"Error occurred when searching query {query}: {e}")
+                    if retries < MAX_RETRIES:
+                        logging.info(f"Retrying ({retries}/{MAX_RETRIES}) after {RETRY_DELAY} seconds...")
+                        time.sleep(RETRY_DELAY)
+                    else:
+                        logging.error(f"Max retries reached for query {query}. Skipping.")
+
+        valid_url_to_snippets = self.webpage_helper.urls_to_snippets(list(url_to_results.keys()))
+        collected_results = []
+        for url in valid_url_to_snippets:
+            r = url_to_results[url]
+            r['snippets'] = valid_url_to_snippets[url]['snippets']
+            collected_results.append(r)
+
+        print(f'lengt of collected_results :{len(collected_results)}')
+        return collected_results
+
+
 

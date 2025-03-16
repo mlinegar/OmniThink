@@ -1,14 +1,15 @@
 import os
 import sys
 import yaml
+import re
 from argparse import ArgumentParser
 from src.actions.article_generation import ArticleGenerationModule
 from src.actions.article_polish import ArticlePolishingModule
 from src.actions.outline_generation import OutlineGenerationModule
 from src.dataclass.Article import Article
-from src.tools.lm import OpenAIModel_dashscope
+from src.tools.lm import OpenAIModel_dashscope, ZhiPuModel
 from src.tools.mindmap import MindMap
-from src.tools.rm import GoogleSearchAli
+from src.tools.rm import GoogleSearchAli, BingSearchAli_new
 
 
 def load_config(config_path: str) -> dict:
@@ -17,11 +18,24 @@ def load_config(config_path: str) -> dict:
     return config
 
 
+def extract_agent_arguments(text: str, pattern: str = r'[A-Za-z]+'):
+    """
+    Extract words that conform to the regular expression pattern from the input text.
+    """
+    matches = re.findall(pattern, text)
+    function_name = ''.join(matches)
+    language_style = {"language": matches[-1], "style": matches[-2]} if len(matches) > 2 else None
+    return function_name, language_style
+
+
 def main(args):
     kwargs = {
         'temperature': 1.0,
         'top_p': 0.9,
-        'api_key': os.getenv("OPENAI_API_KEY"),
+        # 'api_key': os.getenv("OPENAI_API_KEY"),
+        # 'api_key': 'sk-LdjOX2HyTjqqr6qtr7el3VyVSWGYdciQTgvEX8J2e8zbIxco',
+        # 'api_key': 'sk-EGH4X4I171QTGki7pRESrYP9uUGyvWmqoFSAXBCDh4Fxj2DE',
+        'api_key': '1524ca4f1d944a3ab8940933c16d7597.D093usP88Rj2JGxj'
     }
 
     if args.retriever == 'google':
@@ -32,10 +46,14 @@ def main(args):
     except FileNotFoundError as e:
         print(e)
 
-    language_style = config['language']
-    lm = OpenAIModel_dashscope(model=args.llm, max_tokens=2000, **kwargs)
+    agent = config['agent']
+    class_name, language_style = extract_agent_arguments(agent.get('name'))
 
-    topic = input('Topic: ')
+    lm = ZhiPuModel(model=args.llm, max_tokens=1000, **kwargs)
+
+    # topic = input('Topic: ')
+    topic = 'Write an introduction to the job of a translator'
+    topic = 'Taylor Swift EN'
     file_name = topic.replace(' ', '_')
 
     mind_map = MindMap(
@@ -44,15 +62,19 @@ def main(args):
         depth=args.depth
     )
 
-    generator = mind_map.build_map(topic)
-    for layer in generator:
-        print(layer)
+    # generator = mind_map.build_map(topic)
+    # for layer in generator:
+    #     print(layer)
+
+    mindmap = mind_map.load_map(f'{args.outputdir}/map/Taylor_Swift.json')
+    print(mindmap)
 
     ogm = OutlineGenerationModule(lm)
     outline = ogm.generate_outline(topic=topic, mindmap=mind_map)
 
     article_with_outline = Article.from_outline_str(topic=topic, outline_str=outline)
-    ag = ArticleGenerationModule(retriever=rm, article_gen_lm=lm, retrieve_top_k=3, max_thread_num=10)
+    ag = ArticleGenerationModule(retriever=rm, article_gen_lm=lm, retrieve_top_k=3, max_thread_num=10,
+                                 agent_name=class_name)
     article = ag.generate_article(topic=topic, mindmap=mind_map, article_with_outline=article_with_outline,
                                   language_style=language_style)
     ap = ArticlePolishingModule(article_gen_lm=lm, article_polish_lm=lm)
