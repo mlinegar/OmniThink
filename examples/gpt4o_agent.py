@@ -1,6 +1,7 @@
 import os
 import sys
 import yaml
+import re
 from argparse import ArgumentParser
 from src.actions.article_generation import ArticleGenerationModule
 from src.actions.article_polish import ArticlePolishingModule
@@ -15,6 +16,16 @@ def load_config(config_path: str) -> dict:
     with open(config_path, 'r', encoding='utf-8') as file:
         config = yaml.safe_load(file)
     return config
+
+
+def extract_agent_arguments(text: str, pattern: str = r'[A-Za-z]+'):
+    """
+    Extract words that conform to the regular expression pattern from the input text.
+    """
+    matches = re.findall(pattern, text)
+    function_name = ''.join(matches)
+    language_style = {"language": matches[-1], "style": matches[-2]} if len(matches) > 2 else None
+    return function_name, language_style
 
 
 def main(args):
@@ -32,7 +43,9 @@ def main(args):
     except FileNotFoundError as e:
         print(e)
 
-    language_style = config['language']
+    agent = config['agent']
+    class_name, language_style = extract_agent_arguments(agent.get('name'))
+
     lm = OpenAIModel_dashscope(model=args.llm, max_tokens=2000, **kwargs)
 
     topic = input('Topic: ')
@@ -52,7 +65,8 @@ def main(args):
     outline = ogm.generate_outline(topic=topic, mindmap=mind_map)
 
     article_with_outline = Article.from_outline_str(topic=topic, outline_str=outline)
-    ag = ArticleGenerationModule(retriever=rm, article_gen_lm=lm, retrieve_top_k=3, max_thread_num=10)
+    ag = ArticleGenerationModule(retriever=rm, article_gen_lm=lm, retrieve_top_k=3, max_thread_num=10,
+                                 agent_name=class_name)
     article = ag.generate_article(topic=topic, mindmap=mind_map, article_with_outline=article_with_outline,
                                   language_style=language_style)
     ap = ArticlePolishingModule(article_gen_lm=lm, article_polish_lm=lm)
