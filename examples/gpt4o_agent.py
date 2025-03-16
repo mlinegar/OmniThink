@@ -7,9 +7,9 @@ from src.actions.article_generation import ArticleGenerationModule
 from src.actions.article_polish import ArticlePolishingModule
 from src.actions.outline_generation import OutlineGenerationModule
 from src.dataclass.Article import Article
-from src.tools.lm import OpenAIModel_dashscope, ZhiPuModel
+from src.tools.lm import OpenAIModel_dashscope
 from src.tools.mindmap import MindMap
-from src.tools.rm import GoogleSearchAli, BingSearchAli_new
+from src.tools.rm import GoogleSearchAli
 
 
 def load_config(config_path: str) -> dict:
@@ -32,10 +32,7 @@ def main(args):
     kwargs = {
         'temperature': 1.0,
         'top_p': 0.9,
-        # 'api_key': os.getenv("OPENAI_API_KEY"),
-        # 'api_key': 'sk-LdjOX2HyTjqqr6qtr7el3VyVSWGYdciQTgvEX8J2e8zbIxco',
-        # 'api_key': 'sk-EGH4X4I171QTGki7pRESrYP9uUGyvWmqoFSAXBCDh4Fxj2DE',
-        'api_key': '1524ca4f1d944a3ab8940933c16d7597.D093usP88Rj2JGxj'
+        'api_key': os.getenv("OPENAI_API_KEY"),
     }
 
     if args.retriever == 'google':
@@ -49,11 +46,9 @@ def main(args):
     agent = config['agent']
     class_name, language_style = extract_agent_arguments(agent.get('name'))
 
-    lm = ZhiPuModel(model=args.llm, max_tokens=1000, **kwargs)
+    lm = OpenAIModel_dashscope(model=args.llm, max_tokens=2000, **kwargs)
 
-    # topic = input('Topic: ')
-    topic = 'Write an introduction to the job of a translator'
-    topic = 'Taylor Swift EN'
+    topic = input('Topic: ')
     file_name = topic.replace(' ', '_')
 
     mind_map = MindMap(
@@ -62,12 +57,9 @@ def main(args):
         depth=args.depth
     )
 
-    # generator = mind_map.build_map(topic)
-    # for layer in generator:
-    #     print(layer)
-
-    mindmap = mind_map.load_map(f'{args.outputdir}/map/Taylor_Swift.json')
-    print(mindmap)
+    generator = mind_map.build_map(topic)
+    for layer in generator:
+        print(layer)
 
     ogm = OutlineGenerationModule(lm)
     outline = ogm.generate_outline(topic=topic, mindmap=mind_map)

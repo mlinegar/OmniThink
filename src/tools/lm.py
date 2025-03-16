@@ -61,12 +61,8 @@ class OpenAIModel_dashscope(dspy.OpenAI):
         assert only_completed, "for now"
         assert return_sorted is False, "for now"
 
-        # CALL_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
-        CALL_URL = 'https://api.gpts.vin/v1/chat/completions/'
-        # LM_KEY = 'sk-LdjOX2HyTjqqr6qtr7el3VyVSWGYdciQTgvEX8J2e8zbIxco'
-        LM_KEY = 'sk-EGH4X4I171QTGki7pRESrYP9uUGyvWmqoFSAXBCDh4Fxj2DE'
-
-        # LM_KEY = os.getenv('LM_KEY')
+        CALL_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+        LM_KEY = os.getenv('LM_KEY')
         HEADERS = {
             'Content-Type': 'application/json',
             "Authorization": f"Bearer {LM_KEY}"
@@ -253,93 +249,5 @@ class QwenModel(dspy.OpenAI):
             choices = completed_choices
 
         completions = [c['message']['content'] for c in choices]
-
-        return completions
-
-
-class ZhiPuModel(dspy.OpenAI):
-    """A wrapper class for dspy.OpenAI."""
-    def __init__(
-            self,
-            model: str = "glm-4",
-            api_key: Optional[str] = None,
-            **kwargs
-    ):
-        super().__init__(model=model, api_key=api_key, **kwargs)
-        self.model = model
-        self.api_key = api_key
-        self._token_usage_lock = threading.Lock()
-        self.prompt_tokens = 0
-        self.completion_tokens = 0
-
-    def log_usage(self, response):
-        """Log the total tokens from the OpenAI API response."""
-        # print(type(response))
-        # for chunk in response:
-        #     print(chunk)
-        usage_data = response.usage
-        if usage_data:
-            with self._token_usage_lock:
-                self.prompt_tokens += usage_data.prompt_tokens
-                self.completion_tokens += usage_data.completion_tokens
-
-    def get_usage_and_reset(self):
-        """Get the total tokens used and reset the token usage."""
-        usage = {
-            self.kwargs.get('model') or self.kwargs.get('engine'):
-                {'prompt_tokens': self.prompt_tokens, 'completion_tokens': self.completion_tokens}
-        }
-        self.prompt_tokens = 0
-        self.completion_tokens = 0
-
-        return usage
-
-    def __call__(
-            self,
-            prompt: str,
-            only_completed: bool = True,
-            return_sorted: bool = False,
-            **kwargs,
-    ) -> list[dict[str, Any]]:
-        """Copied from dspy/dsp/modules/gpt3.py with the addition of tracking token usage."""
-
-        assert only_completed, "for now"
-        assert return_sorted is False, "for now"
-
-        # LM_KEY = os.getenv('LM_KEY')
-        LM_KEY = "1524ca4f1d944a3ab8940933c16d7597.D093usP88Rj2JGxj"
-        client = OpenAI(api_key=LM_KEY, base_url="https://open.bigmodel.cn/api/paas/v4/")
-
-        max_retries = 1
-        attempt = 0
-        messages = []
-        if self.model != "deepseek-reasoner":
-            messages.append({"role": "system", "content": "You are a helpful assistant"})
-        messages.append({"role": "user", "content": prompt})
-        # print(messages)
-        while attempt < max_retries:
-            try:
-                response = client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    stream=False
-                )
-                choices = response.choices
-                print(choices)
-                break
-
-            except Exception as e:
-                delay = random.uniform(0, 3)
-                time.sleep(delay)
-                attempt += 1
-
-        self.log_usage(response)
-
-        completed_choices = [c for c in choices if c.finish_reason != "length"]
-
-        if only_completed and len(completed_choices):
-            choices = completed_choices
-
-        completions = [c.message.content for c in choices]
 
         return completions
