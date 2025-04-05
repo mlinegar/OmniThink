@@ -20,8 +20,7 @@ through Thinking</h3>
 
 <!-- **Affiliations:** -->
 
-👏 Welcome to try OmniThink in our **[<img src="./assets/tongyi.png" width="14px" style="display:inline;"> Modelscope online demo](https://www.modelscope.cn/studios/iic/OmniThink)**!
-
+👏 Welcome to try OmniThink in our **[<img src="./assets/tongyi.png" width="14px" style="display:inline;"> Modelscope online demo](https://www.modelscope.cn/studios/iic/OmniThink) and [🤗HuggingFace online demo]( https://huggingface.co/spaces/zjunlp/OmniThink)**!
 <p align="center">
 <a href="https://zjunlp.github.io/project/OmniThink">[🤖Project]</a>
 <a href="https://arxiv.org/abs/2501.09751">[📄Paper]</a>
