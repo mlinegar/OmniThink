@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Callable, Union, List
+from typing import List, Dict, Any, Optional, Union, Callable
 import dspy
 import requests
 import re
@@ -8,6 +8,10 @@ import uuid
 import json
 import random
 import time
+import numpy as np
+import faiss
+from sentence_transformers import SentenceTransformer
+
 from src.utils.WebPageHelper import WebPageHelper
 
 
@@ -323,4 +327,161 @@ class BingSearch(dspy.Retrieve):
             r['snippets'] = valid_url_to_snippets[url]['snippets']
             collected_results.append(r)
         return collected_results
+
+
+class OfflineRAGFlow:
+    def __init__(self,
+                 model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+                 chunk_size: int = 800,
+                 overlap: int = 120,
+                 k: int = 5):
+        self.model_name = model_name
+        self.model = SentenceTransformer(model_name)
+        self.chunk_size = chunk_size
+        self.overlap = overlap
+        self.k = k
+
+        self.docs: Dict[str, Dict[str, Any]] = {}
+        self.keys: List[tuple] = []
+        self.embeddings: Optional[np.ndarray] = None
+        self.index: Optional[faiss.IndexFlatIP] = None
+
+    # -----------------------------
+    # Helper functions
+    # -----------------------------
+    def _clean_text(self, text: str) -> str:
+        text = re.sub(r'\[.*?\]\(.*?\)', '', text)  # remove markdown links
+        text = re.sub(r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+", '', text)  # remove urls
+        text = re.sub(r"\n\n+", "\n", text)
+        return text.strip()
+
+    def _chunk_text(self, text: str) -> List[str]:
+        text = self._clean_text(text)
+        n = len(text)
+        if n == 0:
+            return []
+        chunks = []
+        i = 0
+        while i < n:
+            j = min(n, i + self.chunk_size)
+            slice_ = text[i:j]
+            k = slice_.rfind("。")
+            if k == -1:
+                k = slice_.rfind(".")
+            if k != -1 and (i + k + 1 - i) > self.chunk_size * 0.6:
+                j = i + k + 1
+            chunks.append(text[i:j].strip())
+            if j >= n:
+                break
+            i = max(j - self.overlap, i + 1)
+        return [c for c in chunks if c]
+
+    def _encode(self, texts: List[str]) -> np.ndarray:
+        return np.asarray(
+            self.model.encode(texts, batch_size=64, show_progress_bar=False, normalize_embeddings=True),
+            dtype=np.float32
+        )
+
+    # -----------------------------
+    # Document operations
+    # -----------------------------
+    def ingest(self, text: str, meta: Optional[Dict[str, Any]] = None) -> str:
+        doc_id = meta.get("doc_id") if meta else str(uuid.uuid4())
+        chunks = self._chunk_text(text)
+        self.docs[doc_id] = {"text": text, "meta": meta or {}, "chunks": chunks}
+        self._update_index(doc_id, chunks)
+        return doc_id
+
+    def _update_index(self, doc_id: str, chunks: List[str]):
+        if not chunks:
+            return
+        embs = self._encode(chunks)
+        if self.index is None:
+            d = embs.shape[1]
+            self.index = faiss.IndexFlatIP(d)
+            self.index.add(embs)
+            self.embeddings = embs
+            self.keys = [(doc_id, i) for i in range(len(chunks))]
+        else:
+            self.index.add(embs)
+            self.embeddings = np.vstack([self.embeddings, embs]) if self.embeddings is not None else embs
+            base = len([k for k in self.keys if k[0] == doc_id])
+            self.keys.extend([(doc_id, base + i) for i in range(len(chunks))])
+
+    # -----------------------------
+    # Retrieval
+    # -----------------------------
+    def search(self, query: str, k: Optional[int] = None) -> List[Dict[str, Any]]:
+        if self.index is None or not self.keys:
+            return []
+        k = k or self.k
+        q = self._encode([query])
+        D, I = self.index.search(q, min(k, len(self.keys)))
+        results = []
+        for score, idx in zip(D[0].tolist(), I[0].tolist()):
+            if idx == -1:
+                continue
+            doc_id, chunk_idx = self.keys[idx]
+            doc = self.docs.get(doc_id)
+            if not doc:
+                continue
+            results.append({
+                "doc_id": doc_id,
+                "title": doc["meta"].get("title", doc_id),
+                "snippet": doc["chunks"][chunk_idx],
+                "score": float(score)
+            })
+        return results
+
+    def qa(self, query: str, k: Optional[int] = None) -> Dict[str, Any]:
+        hits = self.search(query, k=k)
+        context = "\n\n".join([f"[{i+1}] {h['snippet']}" for i, h in enumerate(hits)])
+        answer = (
+            f"Based on the retrieved context, here is a possible answer.\n\n"
+            f"Question: {query}\n\nContext:\n{context}"
+        )
+        return {"answer": answer, "citations": hits}
+
+
+class LocalSearch(dspy.Retrieve):
+    def __init__(self,
+                 search: OfflineRAGFlow,
+                 k: int = 3,
+                 is_valid_source: Optional[Callable[[str], bool]] = None,
+                 **kwargs):
+        super().__init__(k=k)
+        self.search = search
+        self.k = k
+        self.is_valid_source = is_valid_source or (lambda _u: True)
+        self.usage = 0
+
+    def get_usage_and_reset(self) -> Dict[str, int]:
+        u = self.usage
+        self.usage = 0
+        return {"LocalSearch": u}
+
+    def forward(self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []) -> List[Dict[str, Any]]:
+        queries = [query_or_queries] if isinstance(query_or_queries, str) else list(query_or_queries)
+        self.usage += len(queries)
+        url_to_results: Dict[str, Dict[str, Any]] = {}
+
+        for q in queries:
+            hits = self.search.search(q, k=self.k)
+            for h in hits:
+                doc_id = h["doc_id"]
+                url = f"doc://{doc_id}"
+                if url in exclude_urls or not self.is_valid_source(url):
+                    continue
+                doc = self.search.docs.get(doc_id, {})
+                description = doc.get("text", "")
+                if len(description) > 220:
+                    description = description[:220] + "..."
+                url_to_results[url] = {
+                    "url": url,
+                    "title": h.get("title", doc_id),
+                    "description": description,
+                    "snippets": [h.get("snippet", "")],
+                }
+        return list(url_to_results.values())
+
 
