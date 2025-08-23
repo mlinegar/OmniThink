@@ -40,12 +40,13 @@ through Thinking</h3>
 - 🌻[Quick Start](#quick-start)
 - 🌟[Introduction](#Introduction)
 - 🔧[Dependencies](#Dependencies)
+- 🔍[Local Search Support](#-local-search-support)
 - 📉[Results](#Results)
 - 🧐[Evaluation](#evaluation)
 
 
 # 🔔News
-- `2025-08-24`, We have added local retrieval.
+- `2025-08-24`, We have added **offline local search** support using RAGFlow technology! Now you can search local documents without internet connection.
 - `2025-03-12`, We have optimized the Docker usage for OmniThink.
 - `2025-02-20`, We have added the evaluation methods from the paper to OmniThink, and in the future, we will integrate more evaluation methods.
 - `2025-01-28`, We have provided support for the deepseek-reasoner model. You can try running ./examples/deepseekr1.py to test OmniThink's performance within deepseek-reasoner.
@@ -97,6 +98,49 @@ cd OmniThink
 pip install -r requirements.txt
 ```
 
+## 🔍 Local Search Support
+
+OmniThink now supports **offline local search** using RAGFlow technology! This feature allows you to:
+
+- **Search local documents** without internet connection
+- **Use vector embeddings** for semantic search
+- **Index and retrieve** your own document collections
+- **Maintain data privacy** with local-only processing
+
+### Local Search Features
+
+- **OfflineRAGFlow**: Core RAG engine with FAISS vector database
+- **LocalSearch**: DSPy-compatible search interface
+- **Sentence Transformers**: High-quality text embeddings
+- **Smart Chunking**: Intelligent document segmentation
+- **Semantic Retrieval**: Context-aware search results
+
+### Quick Local Search Setup
+
+```python
+from src.tools.rm import OfflineRAGFlow, LocalSearch
+
+# Initialize the local RAG engine
+rag_engine = OfflineRAGFlow(
+    model_name="sentence-transformers/all-MiniLM-L6-v2",
+    chunk_size=800,
+    overlap=120,
+    k=5
+)
+
+# Add documents to your local index
+rag_engine.ingest(
+    text="Your document content here...",
+    meta={"title": "Document Title", "doc_id": "doc1"}
+)
+
+# Create DSPy-compatible search interface
+local_search = LocalSearch(search=rag_engine, k=3)
+
+# Use in your DSPy pipeline
+results = local_search.forward("your search query")
+```
+
 ## 🐳 Docker
 ```
 git clone https://github.com/zjunlp/OmniThink.git
@@ -111,6 +155,19 @@ docker run -it zjunlp/omnithink:latest
 export LM_KEY=YOUR_API_KEY
 export SEARCHKEY=YOUR_SEARCHKEY
 ```
+
+### Local Search Dependencies
+
+For local search functionality, additional packages are required:
+
+```bash
+# Install local search dependencies
+pip install sentence-transformers faiss-cpu numpy
+
+# Or use the updated requirements.txt
+pip install -r requirements.txt
+```
+
 > You can define your own [LM API](https://github.com/zjunlp/OmniThink/blob/main/src/tools/lm.py) and [SEARCH API](https://github.com/zjunlp/OmniThink/blob/main/src/tools/rm.py)
 
 > Note that the output of the LM should be a LIST.
