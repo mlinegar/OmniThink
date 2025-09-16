@@ -1,0 +1,40 @@
+task: "manifesto"
+labels:
+  - economy
+  - immigration
+  - climate
+  - healthcare
+  - education
+  - foreign_policy
+stance_labels:
+  - support
+  - oppose
+  - neutral
+lexicon:
+  economy:
+    - "GDP"
+    - "inflation"
+    - "tax"
+    - "jobs"
+  immigration:
+    - "visa"
+    - "border"
+    - "asylum"
+  climate:
+    - "carbon"
+    - "emissions"
+    - "renewable"
+relation_weights:
+  expands: 0.5
+  is_a: 0.3
+  part_of: 0.2
+  addresses_question: 0.4
+  perspective_of: 0.1
+scoring:
+  alpha: 1.0
+  beta: 0.6
+  gamma: 0.3
+thresholds:
+  route_consistency_kl: 0.15
+  monotonicity_eta: 0.7
+  monotonicity_delta: 0.1
