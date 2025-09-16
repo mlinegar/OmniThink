@@ -1,0 +1,22 @@
+node_types:
+  - topic
+  - concept
+  - entity
+  - claim_cluster
+edge_kinds:
+  - expands
+  - is_a
+  - part_of
+  - addresses_question
+  - perspective_of
+
+# Admissible (tau(parent), rho, tau(child)) triples.
+compatibility:
+  - [topic,   expands, concept]
+  - [concept, expands, concept]
+  - [concept, is_a,    concept]
+  - [concept, part_of, concept]
+  - [concept, addresses_question, concept]
+  - [concept, perspective_of, concept]
+  - [concept, expands, entity]
+  - [entity,  is_a,    entity]
