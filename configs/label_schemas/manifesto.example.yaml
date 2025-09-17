@@ -24,6 +24,20 @@ lexicon:
     - "carbon"
     - "emissions"
     - "renewable"
+  healthcare:
+    - "health"
+    - "healthcare"
+    - "clinic"
+    - "care"
+  education:
+    - "school"
+    - "education"
+    - "apprenticeship"
+    - "classroom"
+  foreign_policy:
+    - "security"
+    - "alliance"
+    - "diplomacy"
 relation_weights:
   expands: 0.5
   is_a: 0.3
