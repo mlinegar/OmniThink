@@ -1,4 +1,5 @@
 import math
+import re
 from typing import Dict, List, Tuple
 
 class Labeler:
@@ -30,12 +31,12 @@ class Labeler:
         return self._softmax(scores)
 
     def _w(self, claim: str, y: str) -> float:
-        toks = [t.lower() for t in claim.split()]
+        toks = set(re.findall(r"\w+", claim.lower()))
         return 1.0 if any(k.lower() in toks for k in self.lex.get(y, [])) else 0.0
 
     def _u(self, sent: str, y: str, cite_map) -> float:
         # light bump if label lexeme appears in a sentence that cites the node
-        toks = [t.lower() for t in sent.split()]
+        toks = set(re.findall(r"\w+", sent.lower()))
         return 0.5 if any(k.lower() in toks for k in self.lex.get(y, [])) else 0.0
 
     def _softmax(self, scores: Dict[str, float]) -> Dict[str, float]:
